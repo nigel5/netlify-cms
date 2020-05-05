@@ -1,6 +1,6 @@
 import { Base64 } from 'js-base64';
 import semaphore, { Semaphore } from 'semaphore';
-import { initial, last, partial, result, trimStart, trim, sortBy } from 'lodash';
+import { initial, last, partial, result, trimStart, trim } from 'lodash';
 import { oneLine } from 'common-tags';
 import {
   getAllResponses,
@@ -571,11 +571,17 @@ export default class API {
     const branch = branchFromContentKey(contentKey);
     const pullRequest = await this.getBranchPullRequest(branch);
     const { files } = await this.getDifferences(this.branch, pullRequest.head.sha);
-    const diffs = sortBy(files.map(diffFromFile), d => d.path.length);
+    const diffs = files.map(diffFromFile);
     const label = pullRequest.labels.find(l => isCMSLabel(l.name)) as { name: string };
     const status = labelToStatus(label.name);
     const timestamp = pullRequest.updated_at;
-    return { collection, slug, status, files: diffs.map(d => ({ ...d, id: d.sha })), timestamp };
+    return {
+      collection,
+      slug,
+      status,
+      diffs: diffs.map(d => ({ path: d.path, newFile: d.newFile, id: d.sha })),
+      timestamp,
+    };
   }
 
   async readFile(
@@ -1327,7 +1333,7 @@ export default class API {
     files: { path: string; sha: string | null; newPath?: string }[],
     branch = this.branch,
   ) {
-    const toMove: { from: string; to: string }[] = [];
+    const toMove: { from: string; to: string; sha: string }[] = [];
     const tree = files.reduce((acc, file) => {
       const entry = {
         path: trimStart(file.path, '/'),
@@ -1337,7 +1343,7 @@ export default class API {
       } as TreeEntry;
 
       if (file.newPath) {
-        toMove.push({ from: file.path, to: file.newPath });
+        toMove.push({ from: file.path, to: file.newPath, sha: file.sha as string });
       } else {
         acc.push(entry);
       }
@@ -1345,7 +1351,7 @@ export default class API {
       return acc;
     }, [] as TreeEntry[]);
 
-    for (const { from, to } of toMove) {
+    for (const { from, to, sha } of toMove) {
       const sourceDir = dirname(from);
       const destDir = dirname(to);
       const files = await this.listFiles(sourceDir, { branch, depth: 100 });
@@ -1362,7 +1368,7 @@ export default class API {
           path: file.path.replace(sourceDir, destDir),
           mode: '100644',
           type: 'blob',
-          sha: file.id,
+          sha: file.path === from ? sha : file.id,
         });
       }
     }
