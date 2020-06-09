@@ -340,7 +340,7 @@ export default class GitGateway implements Implementation {
     } catch (e) {
       // due to a bug in the identity widget (gotrue-js actually) the store is not reset if logout fails
       // TODO: remove after https://github.com/netlify/gotrue-js/pull/83 is merged
-      client.clearStore();
+      // client.clearStore();
     }
   }
   getToken() {
